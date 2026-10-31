@@ -145,6 +145,8 @@ describe('Listings, media and search (integration)', () => {
         const res = await ctx.http().get('/v1/listings').query({ q }).expect(200);
         expect(res.body.items.map((i: { id: string }) => i.id)).toContain(listingId);
       }
+      // LIKE wildcards are matched literally.
+      expect((await ctx.http().get('/v1/listings').query({ q: '%%' }).expect(200)).body.total).toBe(0);
       const none = await ctx.http().get('/v1/listings').query({ q: 'dart tahtası' }).expect(200);
       expect(none.body.total).toBe(0);
     });

@@ -390,7 +390,8 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
     ];
 
     if (query.q) {
-      for (const token of searchTokens(query.q)) and.push({ searchText: { contains: token } });
+      // Escape LIKE wildcards: tokens such as "%90" (tungsten ratio) must match literally.
+      for (const token of searchTokens(query.q)) and.push({ searchText: { contains: token.replace(/[\\%_]/g, '\\$&') } });
     }
 
     let categoryId: string | null = null;

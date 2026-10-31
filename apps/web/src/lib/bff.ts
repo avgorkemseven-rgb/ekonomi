@@ -5,6 +5,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { API_INTERNAL_URL } from './env';
 import { ACCESS_COOKIE, REFRESH_COOKIE, apiFor, clearSessionCookies, setSessionCookies } from './session';
 
+/** Largest body the proxy will buffer (photo limit + multipart overhead). */
+const MAX_BODY_BYTES = 16 * 1024 * 1024;
+
 /** CSRF defence for cookie-authenticated mutations: the request must come from our own origin. */
 export function isSameOrigin(req: NextRequest): boolean {
   const origin = req.headers.get('origin');
@@ -49,8 +52,15 @@ export async function forward(req: NextRequest, path: string): Promise<NextRespo
   if (!/^v1\/[A-Za-z0-9/_.-]+$/.test(path) || path.includes('..')) {
     return NextResponse.json({ statusCode: 404, error: 'NOT_FOUND', message: 'Not found' }, { status: 404 });
   }
+  const declared = Number(req.headers.get('content-length') ?? 0);
+  if (declared > MAX_BODY_BYTES) {
+    return NextResponse.json({ statusCode: 413, error: 'FILE_TOO_LARGE', message: 'Request too large' }, { status: 413 });
+  }
   // Buffer the body so the request can be replayed after a token refresh (photos are ≤ 15 MB).
   const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.arrayBuffer();
+  if (body && body.byteLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ statusCode: 413, error: 'FILE_TOO_LARGE', message: 'Request too large' }, { status: 413 });
+  }
   const contentType = req.headers.get('content-type');
   const url = `${API_INTERNAL_URL}/${path}${req.nextUrl.search}`;
 
