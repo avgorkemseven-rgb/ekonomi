@@ -8,8 +8,11 @@ export function tlToKurus(value: number | string): number | null {
   } else {
     const trimmed = value.trim().replace(/\s|₺|TL/gi, '');
     if (!trimmed) return null;
-    // Turkish format uses "." for thousands and "," for decimals.
-    const normalized = trimmed.includes(',') ? trimmed.replace(/\./g, '').replace(',', '.') : trimmed;
+    // Turkish format uses "." for thousands and "," for decimals ("42.500" = 42500, "1.250,50" = 1250.5).
+    let normalized: string;
+    if (trimmed.includes(',')) normalized = trimmed.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(trimmed)) normalized = trimmed.replace(/\./g, '');
+    else normalized = trimmed;
     if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
     n = Number(normalized);
   }

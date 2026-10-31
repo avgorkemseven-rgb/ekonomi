@@ -1,0 +1,16 @@
+{
+  "name": "@kleps/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "lint": "eslint tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.5",
+    "sharp": "0.35.5",
+    "typescript": "5.9.3"
+  }
+}

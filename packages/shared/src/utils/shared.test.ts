@@ -34,6 +34,11 @@ describe('money', () => {
     expect(tlToKurus(1250.5)).toBe(125050);
     expect(tlToKurus('1.250,50')).toBe(125050);
     expect(tlToKurus('1250.50')).toBe(125050);
+    expect(tlToKurus('42.500')).toBe(4250000);
+    expect(tlToKurus('1.250.000')).toBe(125000000);
+    expect(tlToKurus('42.5')).toBe(4250);
+    expect(tlToKurus('12,5')).toBe(1250);
+    expect(tlToKurus('4.25.0')).toBeNull();
     expect(tlToKurus('abc')).toBeNull();
     expect(tlToKurus(-1)).toBeNull();
   });

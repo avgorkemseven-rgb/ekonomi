@@ -58,11 +58,16 @@ describe('Auth (integration)', () => {
     const u = await registerUser(ctx);
     const first = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: u.refreshToken }).expect(200);
     expect(first.body.refreshToken).not.toBe(u.refreshToken);
-    // Re-using the old token is treated as theft → whole family revoked.
+    // Immediate reuse (parallel requests) is rejected but does not revoke the family.
+    const racing = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: u.refreshToken });
+    expect(racing.status).toBe(401);
+    const second = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: first.body.refreshToken }).expect(200);
+    // Reuse after the grace window is treated as theft → whole family revoked.
+    await ctx.prisma.session.updateMany({ where: { userId: u.user.id, rotatedAt: { not: null } }, data: { rotatedAt: new Date(Date.now() - 60_000) } });
     const reuse = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: u.refreshToken });
     expect(reuse.status).toBe(401);
     expect(reuse.body.error).toBe('INVALID_REFRESH_TOKEN');
-    await ctx.http().post('/v1/auth/refresh').send({ refreshToken: first.body.refreshToken }).expect(401);
+    await ctx.http().post('/v1/auth/refresh').send({ refreshToken: second.body.refreshToken }).expect(401);
   });
 
   it('logout revokes the session', async () => {

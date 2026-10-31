@@ -77,7 +77,12 @@ export class AuthService {
     if (!session) throw invalid();
 
     if (session.revokedAt || session.rotatedAt) {
-      await this.revokeFamily(session.familyId);
+      const withinGrace =
+        !session.revokedAt &&
+        session.rotatedAt !== null &&
+        Date.now() - session.rotatedAt.getTime() < this.config.REFRESH_REUSE_GRACE_SECONDS * 1000;
+      // Parallel requests from one client may race on the same token; only reuse after the grace window is treated as theft.
+      if (!withinGrace) await this.revokeFamily(session.familyId);
       throw invalid();
     }
     if (session.expiresAt <= new Date()) throw invalid();
