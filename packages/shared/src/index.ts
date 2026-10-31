@@ -8,3 +8,4 @@ export * from './utils/turkish';
 export * from './utils/money';
 export * from './utils/provinces';
 export * from './utils/attributes';
+export * from './utils/search';
