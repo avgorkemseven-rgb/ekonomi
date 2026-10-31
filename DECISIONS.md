@@ -44,3 +44,18 @@ Context: Docker daemon is unavailable in the build sandbox. Decision: use locall
 
 ## ADR-010 — Offset pagination in phase 1 · 2026-10-31 · accepted
 Decision: `page`/`pageSize` (max 50) with total counts; fine at MVP scale and simplest for UIs. Switch heavy feeds to cursor pagination later.
+
+## ADR-011 — Refresh-token reuse grace window · 2026-10-31 · accepted
+Context: the web BFF can receive parallel requests that all try to refresh with the same (single-use) refresh token; strict
+reuse detection would revoke the session family and log the user out. Decision: a rotated token presented again within
+`REFRESH_REUSE_GRACE_SECONDS` (default 10 s) is rejected **without** revoking the family; after the window it is treated as
+theft. The browser client retries once. Mobile deduplicates refreshes in-process.
+
+## ADR-012 — No root `loading.tsx` in the web app · 2026-10-31 · accepted
+Context: a root Suspense boundary makes Next.js stream a 200 before `notFound()` runs, so unknown listings/sellers returned
+HTTP 200. Decision: no root loading boundary; client pages render their own spinners. Unknown resources now return 404.
+
+## ADR-013 — Mobile verification without native builds · 2026-10-31 · accepted
+Context: the sandbox cannot run iOS/Android simulators or EAS. Decision: verify mobile with `tsc`, `expo config`,
+`expo export` for android + ios (Metro → Hermes bytecode), and a react-native-web export exercised by Playwright against the
+real API. None of these prove a native build succeeds; EAS builds remain a pending step.

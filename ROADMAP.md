@@ -79,5 +79,8 @@ the seller profile. API-level test confirms the same listing is returned to an u
 AC: README with setup/env/migrations/seed/tests/deploy prerequisites; PROGRESS final state; known limitations listed.
 
 ### Next after phase 1 (phase 2 head of queue)
+Phase 1 (T1–T16) is complete — see PROGRESS.md.
+
 T17 favorites · T18 listing reports + admin report queue · T19 saved searches · T20 expiry job via BullMQ · T21 phone verification
-adapter (SMS provider interface) · T22 Google/Apple sign-in · T23 messaging.
+adapter (SMS provider interface) · T22 Google/Apple sign-in · T23 messaging · T24 EAS build profiles + native builds ·
+T25 framework major upgrades (ADR-001) · T26 contract versioning + consent records.
