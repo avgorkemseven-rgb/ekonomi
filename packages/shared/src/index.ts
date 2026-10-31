@@ -9,3 +9,4 @@ export * from './utils/money';
 export * from './utils/provinces';
 export * from './utils/attributes';
 export * from './utils/search';
+export * from './schemas/admin';

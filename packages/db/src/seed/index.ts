@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { hash } from '@node-rs/argon2';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { buildListingSearchText, slugify, DEFAULT_LISTING_EXPIRY_DAYS } from '@kleps/shared';

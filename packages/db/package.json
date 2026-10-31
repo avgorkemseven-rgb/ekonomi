@@ -4,7 +4,10 @@
   "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist", "prisma"],
+  "files": [
+    "dist",
+    "prisma"
+  ],
   "scripts": {
     "generate": "prisma generate",
     "build": "prisma generate && tsc -p tsconfig.build.json",
@@ -15,9 +18,12 @@
     "migrate:status": "dotenv -e ../../.env -- prisma migrate status",
     "migrate:reset": "dotenv -e ../../.env -- prisma migrate reset",
     "seed": "dotenv -e ../../.env -- tsx src/seed/index.ts",
-    "studio": "dotenv -e ../../.env -- prisma studio"
+    "studio": "dotenv -e ../../.env -- prisma studio",
+    "migrate:create": "dotenv -e ../../.env -- bash scripts/create-migration.sh"
   },
-  "prisma": { "schema": "prisma/schema.prisma" },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
   "dependencies": {
     "@kleps/shared": "workspace:*",
     "@prisma/client": "6.19.3"

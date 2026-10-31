@@ -102,6 +102,7 @@ export function parseListingSearchQuery(raw: Record<string, unknown>) {
 export interface ListingImageDto {
   id: string;
   url: string;
+  thumbUrl: string;
   width: number;
   height: number;
   position: number;
