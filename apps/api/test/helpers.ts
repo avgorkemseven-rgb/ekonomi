@@ -10,7 +10,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 export interface TestContext {
   app: INestApplication;
-  http: () => ReturnType<typeof request<App>>;
+  http: () => ReturnType<typeof request>;
   prisma: PrismaService;
 }
 

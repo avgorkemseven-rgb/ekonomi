@@ -2,7 +2,9 @@
   "name": "kleps",
   "private": true,
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "turbo run dev --parallel",
     "build": "turbo run build",
@@ -10,7 +12,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "test:integration": "pnpm --filter @kleps/api test:integration",
-    "test:e2e": "pnpm --filter @kleps/e2e test",
+    "test:e2e": "pnpm --filter @kleps/e2e e2e",
     "db:generate": "pnpm --filter @kleps/db generate",
     "db:migrate": "pnpm --filter @kleps/db migrate:dev",
     "db:deploy": "pnpm --filter @kleps/db migrate:deploy",
