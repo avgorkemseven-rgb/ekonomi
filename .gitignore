@@ -18,3 +18,5 @@ e2e/playwright-report/
 .DS_Store
 *.pem
 *.key
+dist-export/
+expo-env.d.ts
