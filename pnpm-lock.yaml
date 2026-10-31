@@ -30,6 +30,55 @@ importers:
         specifier: 8.72.1
         version: 8.72.1(eslint@9.39.5(jiti@2.7.0))(typescript@5.9.3)
 
+  apps/admin:
+    dependencies:
+      '@kleps/api-client':
+        specifier: workspace:*
+        version: link:../../packages/api-client
+      '@kleps/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
+      '@kleps/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
+      '@kleps/tokens':
+        specifier: workspace:*
+        version: link:../../packages/tokens
+      next:
+        specifier: 16.4.3
+        version: 16.4.3(@playwright/test@1.63.0)(@types/node@22.20.5)(react-dom@19.2.9(react@19.2.9))(react@19.2.9)
+      react:
+        specifier: 19.2.9
+        version: 19.2.9
+      react-dom:
+        specifier: 19.2.9
+        version: 19.2.9(react@19.2.9)
+      server-only:
+        specifier: 0.0.1
+        version: 0.0.1
+    devDependencies:
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
+      '@types/node':
+        specifier: 22.20.5
+        version: 22.20.5
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: 19.3.0
+        version: 19.3.0(@types/react@19.3.0)
+      dotenv-cli:
+        specifier: 11.1.0
+        version: 11.1.0
+      tailwindcss:
+        specifier: 4.3.3
+        version: 4.3.3
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   apps/api:
     dependencies:
       '@aws-sdk/client-s3':

@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+@import '@kleps/tokens/tokens.css';
+
+@theme inline {
+  --color-bg: var(--k-background);
+  --color-surface: var(--k-surface);
+  --color-muted: var(--k-surface-muted);
+  --color-fg: var(--k-text);
+  --color-fg-muted: var(--k-text-muted);
+  --color-line: var(--k-border);
+  --color-accent: var(--k-accent);
+  --color-accent-hover: var(--k-accent-hover);
+  --color-accent-fg: var(--k-accent-contrast);
+  --color-accent-soft: var(--k-accent-soft);
+  --color-success: var(--k-success);
+  --color-warning: var(--k-warning);
+  --color-danger: var(--k-danger);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  background: var(--k-background);
+  color: var(--k-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--k-focus);
+  outline-offset: 2px;
+}
+
+.wordmark {
+  font-weight: 900;
+  letter-spacing: 0.22em;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 50;
+  background: var(--k-surface);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+}
