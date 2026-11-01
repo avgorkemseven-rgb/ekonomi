@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "KLEPS",
+    "slug": "kleps",
+    "scheme": "kleps",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F8F9FA",
+    "newArchEnabled": true,
+    "ios": {
+      "bundleIdentifier": "app.kleps.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "İlan fotoğrafı eklemek için galerinize erişim gerekiyor.",
+        "NSCameraUsageDescription": "İlan fotoğrafı çekmek için kameranıza erişim gerekiyor."
+      }
+    },
+    "android": {
+      "package": "app.kleps.mobile",
+      "edgeToEdgeEnabled": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-image-picker", { "photosPermission": "İlan fotoğrafı eklemek için galerinize erişim gerekiyor." }]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}

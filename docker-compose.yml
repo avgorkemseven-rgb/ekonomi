@@ -1,0 +1,28 @@
+# Local infrastructure for development. Not for production.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kleps
+      POSTGRES_PASSWORD: kleps
+      POSTGRES_DB: kleps
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data, ./infra/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql:ro]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kleps"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: kleps
+      MINIO_ROOT_PASSWORD: kleps-dev-only
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [miniodata:/data]
+volumes:
+  pgdata:
+  miniodata:

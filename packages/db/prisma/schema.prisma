@@ -1,0 +1,267 @@
+// KLEPS database schema. Enum values must match @kleps/shared enums.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum SellerType {
+  INDIVIDUAL
+  BUSINESS
+}
+
+enum VerificationStatus {
+  NONE
+  PENDING
+  VERIFIED
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ListingStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  EXPIRED
+  SOLD
+  ARCHIVED
+  REMOVED
+}
+
+enum ListingCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  FOR_PARTS
+}
+
+enum AttributeType {
+  TEXT
+  NUMBER
+  SELECT
+  BOOLEAN
+}
+
+model User {
+  id                 String             @id @default(cuid())
+  email              String             @unique
+  username           String             @unique
+  passwordHash       String?
+  displayName        String
+  role               UserRole           @default(USER)
+  sellerType         SellerType         @default(INDIVIDUAL)
+  verificationStatus VerificationStatus @default(NONE)
+  status             UserStatus         @default(ACTIVE)
+  city               String?
+  bio                String?
+  phone              String?
+  phoneVerifiedAt    DateTime?
+  emailVerifiedAt    DateTime?
+  /// Per-user override of the active listing limit (null = use configured default).
+  activeListingLimit Int?
+  lastLoginAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  sessions  Session[]
+  listings  Listing[]
+  images    ListingImage[]
+  auditLogs AuditLog[]
+
+  @@index([createdAt])
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  /// SHA-256 hash of the opaque refresh token. The raw token is never stored.
+  tokenHash  String    @unique
+  /// All tokens rotated from the same login share a family; reuse revokes the family.
+  familyId   String
+  expiresAt  DateTime
+  rotatedAt  DateTime?
+  revokedAt  DateTime?
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model Category {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  /// Optional names for other locales, e.g. { "en": "Billiards" }.
+  translations Json?
+  icon         String?
+  parentId     String?
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  parent     Category?           @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children   Category[]          @relation("CategoryTree")
+  attributes CategoryAttribute[]
+  brands     Brand[]             @relation("BrandCategories")
+  models     ProductModel[]
+  listings   Listing[]
+
+  @@index([parentId, sortOrder])
+}
+
+model CategoryAttribute {
+  id         String        @id @default(cuid())
+  categoryId String
+  key        String
+  label      String
+  type       AttributeType
+  options    String[]      @default([])
+  unit       String?
+  required   Boolean       @default(false)
+  filterable Boolean       @default(false)
+  sortOrder  Int           @default(0)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, key])
+}
+
+model Brand {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  categories Category[]     @relation("BrandCategories")
+  models     ProductModel[]
+  listings   Listing[]
+}
+
+model ProductModel {
+  id         String   @id @default(cuid())
+  brandId    String
+  categoryId String?
+  slug       String
+  name       String
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  listings Listing[]
+
+  @@unique([brandId, slug])
+}
+
+model Listing {
+  id             String            @id @default(cuid())
+  sellerId       String
+  categoryId     String
+  brandId        String?
+  modelId        String?
+  title          String
+  slug           String
+  description    String            @default("")
+  /// Price in kuruş (1 TL = 100 kuruş).
+  priceAmount    Int?
+  currency       String            @default("TRY")
+  condition      ListingCondition?
+  city           String?
+  district       String?
+  attributes     Json              @default("{}")
+  allowsShipping Boolean           @default(false)
+  allowsInPerson Boolean           @default(true)
+  status         ListingStatus     @default(DRAFT)
+  /// Turkish-normalized text used by keyword search (GIN trigram index, see migration).
+  searchText     String            @default("")
+  publishedAt    DateTime?
+  expiresAt      DateTime?
+  renewCount     Int               @default(0)
+  riskScore      Int               @default(0)
+  riskReasons    String[]          @default([])
+  moderationNote String?
+  moderatedAt    DateTime?
+  moderatedById  String?
+  closedAt       DateTime?
+  viewCount      Int               @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  seller   User          @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  category Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand    Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  model    ProductModel? @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  images   ListingImage[]
+
+  @@index([status, publishedAt(sort: Desc)])
+  @@index([categoryId, status])
+  @@index([sellerId, status])
+  @@index([brandId, status])
+  @@index([city, status])
+  @@index([status, priceAmount])
+  @@index([status, expiresAt])
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin, map: "Listing_searchText_trgm_idx")
+}
+
+model ListingImage {
+  id         String   @id @default(cuid())
+  listingId  String
+  ownerId    String
+  storageKey String   @unique
+  url        String
+  /// Small variant used on listing cards.
+  thumbStorageKey String @unique
+  thumbUrl        String
+  width      Int
+  height     Int
+  sizeBytes  Int
+  mimeType   String
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  owner   User    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, position])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@index([actorId])
+}

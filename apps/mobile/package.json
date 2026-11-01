@@ -1,0 +1,43 @@
+{
+  "name": "@kleps/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "scripts": {
+    "dev": "expo start",
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint app src",
+    "config:check": "expo config --type public --json > /dev/null && echo 'expo config OK'",
+    "doctor": "expo-doctor",
+    "export:android": "expo export --platform android --output-dir dist-export/android",
+    "export:ios": "expo export --platform ios --output-dir dist-export/ios",
+    "export:web": "expo export --platform web --output-dir dist-export/web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
+    "@kleps/api-client": "workspace:*",
+    "@kleps/i18n": "workspace:*",
+    "@kleps/shared": "workspace:*",
+    "@kleps/tokens": "workspace:*",
+    "expo": "54.0.38",
+    "expo-constants": "~18.0.14",
+    "expo-image-picker": "~17.0.11",
+    "expo-linking": "~8.0.12",
+    "expo-router": "~6.0.24",
+    "expo-secure-store": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-dom": "19.1.0",
+    "react-native-web": "~0.21.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.17",
+    "typescript": "5.9.3"
+  }
+}

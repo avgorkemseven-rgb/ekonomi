@@ -1,0 +1,17 @@
+{
+  "name": "@kleps/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "dependencies": { "@kleps/shared": "workspace:*" },
+  "devDependencies": { "typescript": "5.9.3", "vitest": "3.2.7" }
+}
