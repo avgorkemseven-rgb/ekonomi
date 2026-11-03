@@ -99,3 +99,16 @@ Residual risks: no image-content analysis exists — automatic publish approval 
 minority of added photos goes live unreviewed (needs an image-moderation provider, later phase). Contact info alone
 (score 40) stays below the review threshold, at publish and on edit alike — a calibration question, not a bypass.
 A moderator may approve a version that the seller edited after the moderator opened it (no optimistic version check yet).
+
+## ADR-016 — Bounded request bodies in the BFF proxies · 2026-11-03 · accepted
+Context: review found the web/admin proxies checked `Content-Length` only when present and then called
+`req.arrayBuffer()`, buffering the entire body before comparing its size; a chunked request without `Content-Length` was
+buffered without bound (reproduced: 64 MB fully received before the 413). Auth route handlers used unbounded `req.json()`.
+Decision: `readBodyWithLimit` (in `@kleps/api-client`, shared by both Next apps) reads the web stream chunk by chunk and
+cancels it as soon as the running total exceeds the limit; `checkDeclaredLength` rejects a too-large declared length
+(413) or a malformed one (400) before reading. Limits: 16 MB for the proxy (15 MB photo + multipart overhead), 16 KB for
+login/register JSON. The bounded buffer is kept so a request can still be replayed after a token refresh.
+Notes: memory per request is bounded by limit + one chunk. Node's HTTP parser already rejects malformed framing (e.g.
+non-numeric Content-Length) before route code runs; the header check is defence in depth. The API keeps its own limits
+(JSON 200 KB, multer 25 MB hard cap + configured photo limit). Edge/CDN request-size limits should also be configured
+in production.
