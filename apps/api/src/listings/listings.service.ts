@@ -24,7 +24,8 @@ import { CategoriesService } from '../categories/categories.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { effectiveListingLimit } from '../users/user.mapper';
 import { canRenew, cardInclude, detailInclude, effectiveStatus, toCardDto, toDetailDto } from './listing.mapper';
-import { assessListingRisk } from './risk';
+import { classifyListingChange, freeTextOf, needsMediaReview } from './moderation-policy';
+import { assessListingRisk, REVIEW_THRESHOLD } from './risk';
 
 const EDITABLE: Listing['status'][] = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'REJECTED', 'EXPIRED'];
 const PUBLISHABLE: Listing['status'][] = ['DRAFT', 'REJECTED'];
@@ -217,13 +218,30 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
     };
 
     if (isLive) {
-      // Live listings must stay complete, and edited content is re-assessed.
+      // Live listings must stay complete.
       this.assertPublishable({ ...listing, ...merged, ...(data as Partial<Listing>) } as Listing, Infinity);
-      if (listing.status === 'ACTIVE' && (input.title !== undefined || input.description !== undefined || input.priceAmount !== undefined)) {
-        const risk = await this.assess(user, { ...listing, ...merged, priceAmount: (data.priceAmount as number | null | undefined) ?? listing.priceAmount });
-        if (risk.requiresReview) {
-          Object.assign(data, { status: 'PENDING_REVIEW', riskScore: risk.score, riskReasons: risk.reasons });
-        }
+    }
+    if (listing.status === 'ACTIVE') {
+      // Anything that changes what moderation saw is re-assessed with the publish-time rules; harmless fields are not (ADR-015).
+      const change = classifyListingChange(
+        { ...listing, attributes: listing.attributes as AttributeValues },
+        input,
+      );
+      if (change.categoryChanged || change.contentChanged) {
+        const risk = await this.assess(user, {
+          title: merged.title,
+          description: merged.description,
+          priceAmount: input.priceAmount !== undefined ? input.priceAmount : listing.priceAmount,
+          district: input.district !== undefined ? input.district : listing.district,
+          attributes: content.attributes,
+        });
+        const reasons = change.categoryChanged ? [...risk.reasons, 'category_changed'] : risk.reasons;
+        const review = risk.requiresReview || change.categoryChanged;
+        Object.assign(data, {
+          riskScore: review ? Math.max(risk.score, REVIEW_THRESHOLD) : risk.score,
+          riskReasons: reasons,
+          ...(review && { status: 'PENDING_REVIEW', moderationNote: null }),
+        });
       }
     }
     await this.prisma.listing.update({ where: { id }, data });
@@ -249,7 +267,10 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
     if (issues.length) throw Errors.badRequest(ERROR_CODES.LISTING_NOT_PUBLISHABLE, 'Listing is incomplete', issues);
   }
 
-  private async assess(user: AuthUser, listing: Pick<Listing, 'title' | 'description' | 'priceAmount'>) {
+  private async assess(
+    user: AuthUser,
+    listing: Pick<Listing, 'title' | 'description' | 'priceAmount' | 'district'> & { attributes: AttributeValues },
+  ) {
     const account = await this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { createdAt: true } });
     const recent = await this.prisma.listing.count({
       where: { sellerId: user.id, publishedAt: { gte: new Date(Date.now() - 86_400_000) } },
@@ -257,6 +278,7 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
     const risk = assessListingRisk({
       title: listing.title,
       description: listing.description,
+      extraText: freeTextOf(listing),
       priceAmount: listing.priceAmount,
       accountAgeHours: (Date.now() - account.createdAt.getTime()) / 3_600_000,
       recentPublishCount24h: recent,
@@ -302,7 +324,7 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
       { ...listing, attributes: listing.attributes as AttributeValues },
       true,
     );
-    const risk = await this.assess(user, listing);
+    const risk = await this.assess(user, { ...listing, attributes: listing.attributes as AttributeValues });
     await this.withSellerLimit(user.id, id, async (tx) => {
       const now = new Date();
       await tx.listing.update({
@@ -316,6 +338,7 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
               publishedAt: now,
               expiresAt: this.expiryFrom(now),
               moderationNote: null,
+              contentReviewedAt: now,
             },
       });
     });
@@ -326,16 +349,54 @@ export class ListingsService implements OnModuleInit, OnModuleDestroy {
     const listing = await this.getOwned(id, user);
     if (!canRenew(listing)) throw Errors.invalidState('Listing is not eligible for renewal yet');
     const wasExpired = effectiveStatus(listing) === 'EXPIRED';
+    // Expired listings can be edited without moderation, so renewal re-applies the publish-time checks (ADR-015).
+    const images = await this.prisma.listingImage.findMany({ where: { listingId: id } });
+    const risk = await this.assess(user, { ...listing, attributes: listing.attributes as AttributeValues });
+    const mediaChanged = needsMediaReview(images, listing.contentReviewedAt);
+    const review = risk.requiresReview || mediaChanged;
     const apply = async (tx: Prisma.TransactionClient) => {
       const now = new Date();
       await tx.listing.update({
         where: { id },
-        data: { status: 'ACTIVE', expiresAt: this.expiryFrom(now), renewCount: { increment: 1 }, ...(wasExpired && { publishedAt: now }) },
+        data: review
+          ? {
+              status: 'PENDING_REVIEW',
+              riskScore: Math.max(risk.score, REVIEW_THRESHOLD),
+              riskReasons: mediaChanged ? [...risk.reasons, 'media_changed'] : risk.reasons,
+              renewCount: { increment: 1 },
+            }
+          : {
+              status: 'ACTIVE',
+              expiresAt: this.expiryFrom(now),
+              renewCount: { increment: 1 },
+              riskScore: risk.score,
+              riskReasons: risk.reasons,
+              ...(wasExpired && { publishedAt: now }),
+            },
       });
     };
     if (wasExpired) await this.withSellerLimit(user.id, id, apply);
     else await apply(this.prisma);
     return this.withDetail(id, user);
+  }
+
+  /**
+   * Called after any photo change. A live listing whose cover or majority of photos was not part of the last
+   * moderation decision goes back to review (ADR-015).
+   */
+  async enforceMediaReview(listingId: string): Promise<void> {
+    const listing = await this.prisma.listing.findUnique({ where: { id: listingId }, include: { images: true } });
+    if (!listing || effectiveStatus(listing) !== 'ACTIVE') return;
+    if (!needsMediaReview(listing.images, listing.contentReviewedAt)) return;
+    await this.prisma.listing.updateMany({
+      where: { id: listingId, status: 'ACTIVE' },
+      data: {
+        status: 'PENDING_REVIEW',
+        riskScore: Math.max(listing.riskScore, REVIEW_THRESHOLD),
+        riskReasons: Array.from(new Set([...listing.riskReasons, 'media_changed'])),
+        moderationNote: null,
+      },
+    });
   }
 
   async close(user: AuthUser, id: string, input: ListingCloseInput): Promise<ListingDetailDto> {

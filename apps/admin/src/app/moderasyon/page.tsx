@@ -15,6 +15,8 @@ const RISK_LABELS: Record<string, string> = {
   counterfeit_terms: 'Sahte/replika ifadesi',
   new_account_velocity: 'Yeni hesap, yoğun ilan',
   suspicious_price: 'Şüpheli fiyat',
+  category_changed: 'Yayındayken kategori değişti',
+  media_changed: 'Onaylı fotoğraflar değişti',
 };
 
 const WEB_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';

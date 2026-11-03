@@ -70,6 +70,7 @@ export class ListingImagesService {
           },
         });
       });
+      await this.listings.enforceMediaReview(listingId);
       return toImageDto(image);
     } catch (err) {
       await this.deleteObjects([key, thumbKey]);
@@ -91,6 +92,7 @@ export class ListingImagesService {
       const rest = await tx.listingImage.findMany({ where: { listingId }, orderBy: { position: 'asc' } });
       await Promise.all(rest.map((img, i) => tx.listingImage.update({ where: { id: img.id }, data: { position: i } })));
     });
+    await this.listings.enforceMediaReview(listingId);
     await this.deleteObjects([image.storageKey, image.thumbStorageKey]);
   }
 
@@ -104,6 +106,7 @@ export class ListingImagesService {
     await this.prisma.$transaction(
       input.imageIds.map((id, position) => this.prisma.listingImage.update({ where: { id }, data: { position } })),
     );
+    await this.listings.enforceMediaReview(listingId);
     const updated = await this.prisma.listingImage.findMany({ where: { listingId }, orderBy: { position: 'asc' } });
     return updated.map(toImageDto);
   }

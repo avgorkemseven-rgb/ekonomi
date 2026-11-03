@@ -12,6 +12,8 @@ export type RiskReason =
 export interface RiskInput {
   title: string;
   description: string;
+  /** Other free text shown on the listing (district, text attribute values). */
+  extraText?: string[];
   priceAmount: number | null;
   accountAgeHours: number;
   recentPublishCount24h: number;
@@ -48,7 +50,7 @@ const COUNTERFEIT = ['replika', 'cakma', 'muadil', 'kopya', 'fake', 'a kalite', 
  * maps to a named reason that is shown to moderators.
  */
 export function assessListingRisk(input: RiskInput): RiskAssessment {
-  const raw = `${input.title}\n${input.description}`;
+  const raw = [input.title, input.description, ...(input.extraText ?? [])].join('\n');
   const text = normalizeTurkish(raw);
   const reasons = new Set<RiskReason>();
 

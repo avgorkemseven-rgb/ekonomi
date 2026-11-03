@@ -79,3 +79,23 @@ Trade-offs: a thief who obtains a refresh token and replays it within ≤10 s of
 successor as the victim — the same exposure as any reuse interval (Auth0/Okta use the same pattern), bounded in time and
 count, and detected on the successor's second use. Rotating `JWT_ACCESS_SECRET` breaks in-flight grace replays (≤ window)
 and already requires re-login for access tokens. Refresh adds one row lock per refresh call; contention is per token only.
+
+## ADR-015 — Moderation of changes to published listings · 2026-11-03 · accepted
+Context: review found that a seller could publish harmless content and then change it without any check: only
+title/description/price edits were re-assessed; category, brand/model, district and free-text attributes were not; photo
+uploads/deletes/reorders on live listings were never moderated; editing an expired listing and renewing it skipped checks.
+Decision:
+- Edits to an ACTIVE listing that touch title, description, price, district, brand/model or attributes re-run the same
+  rule-based risk assessment as publishing, now over all free text (district + string attribute values). Harmless fields
+  (condition, city, delivery options, unchanged values) trigger nothing. The score/reasons are stored either way; the
+  listing goes to PENDING_REVIEW only at the publish threshold, so edits are judged exactly like new listings.
+- A category change on a live listing always goes to review (`category_changed`): it is rare and changes which rules apply.
+- New `Listing.contentReviewedAt` = last moderation decision point (auto-approval at publish, or moderator approval;
+  backfilled from `moderatedAt`/`publishedAt`). Photos created after it are unreviewed. After any photo change, a live
+  listing whose **cover** photo is unreviewed or whose photos are **mostly** unreviewed goes to review (`media_changed`).
+  Adding a minority of extra photos or reordering reviewed photos stays live. Renewal does not move the baseline.
+- Renewal re-applies the text and photo checks, so expired → edit → renew cannot skip moderation.
+Residual risks: no image-content analysis exists — automatic publish approval never inspected photo content, and a
+minority of added photos goes live unreviewed (needs an image-moderation provider, later phase). Contact info alone
+(score 40) stays below the review threshold, at publish and on edit alike — a calibration question, not a bypass.
+A moderator may approve a version that the seller edited after the moderator opened it (no optimistic version check yet).

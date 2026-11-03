@@ -208,6 +208,8 @@ model Listing {
   riskScore      Int               @default(0)
   riskReasons    String[]          @default([])
   moderationNote String?
+  /// Last moderation decision point (publish or moderator approval). Photos added after it are "unreviewed" (ADR-015).
+  contentReviewedAt DateTime?
   moderatedAt    DateTime?
   moderatedById  String?
   closedAt       DateTime?
