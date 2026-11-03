@@ -47,7 +47,7 @@ All variables are documented in [`.env.example`](.env.example). Key ones:
 |---|---|
 | `DATABASE_URL`, `DATABASE_URL_TEST`, `SHADOW_DATABASE_URL` | Main DB, integration-test DB (truncated by tests!), scratch DB for authoring migrations |
 | `JWT_ACCESS_SECRET` | ≥ 32 chars; generate with `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`. Default value is rejected in production |
-| `ACCESS_TOKEN_TTL_SECONDS`, `REFRESH_TOKEN_TTL_DAYS`, `REFRESH_REUSE_GRACE_SECONDS` | Session lifetimes |
+| `ACCESS_TOKEN_TTL_SECONDS`, `REFRESH_TOKEN_TTL_DAYS`, `REFRESH_REUSE_GRACE_SECONDS` | Session lifetimes; bounded refresh-replay window for parallel requests (ADR-014) |
 | `CORS_ORIGINS` | Browser origins allowed to call the API directly (web/admin use the server-side proxy) |
 | `TRUST_PROXY` | `true` behind a reverse proxy (Railway) so client IPs/rate limits are correct |
 | `LISTING_ACTIVE_LIMIT_INDIVIDUAL` (10), `LISTING_ACTIVE_LIMIT_BUSINESS` (50), `LISTING_EXPIRY_DAYS` (60), `LISTING_MAX_PHOTOS` (15), `PHOTO_MAX_BYTES`, `VIDEO_MAX_BYTES` | Marketplace rules |

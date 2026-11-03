@@ -59,7 +59,14 @@ export async function seedCatalog(prisma: PrismaService): Promise<Catalog> {
     },
   });
   const dart = await prisma.category.create({ data: { slug: 'dart', name: 'Dart', sortOrder: 1 } });
-  const darts = await prisma.category.create({ data: { slug: 'dart-oklari', name: 'Dart Okları', parentId: dart.id } });
+  const darts = await prisma.category.create({
+    data: {
+      slug: 'dart-oklari',
+      name: 'Dart Okları',
+      parentId: dart.id,
+      attributes: { create: [{ key: 'barrelModel', label: 'Gövde modeli', type: 'TEXT' }] },
+    },
+  });
   const predator = await prisma.brand.create({ data: { slug: 'predator', name: 'Predator', categories: { connect: [{ id: cues.id }] } } });
   const revo = await prisma.productModel.create({ data: { slug: 'revo-12-4', name: 'REVO 12.4', brandId: predator.id, categoryId: cues.id } });
   const target = await prisma.brand.create({ data: { slug: 'target', name: 'Target', categories: { connect: [{ id: darts.id }] } } });

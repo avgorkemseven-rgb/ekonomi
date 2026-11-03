@@ -58,9 +58,9 @@ describe('Auth (integration)', () => {
     const u = await registerUser(ctx);
     const first = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: u.refreshToken }).expect(200);
     expect(first.body.refreshToken).not.toBe(u.refreshToken);
-    // Immediate reuse (parallel requests) is rejected but does not revoke the family.
-    const racing = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: u.refreshToken });
-    expect(racing.status).toBe(401);
+    // Immediate reuse (parallel requests) converges on the same successor and does not revoke the family (ADR-014).
+    const racing = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: u.refreshToken }).expect(200);
+    expect(racing.body.refreshToken).toBe(first.body.refreshToken);
     const second = await ctx.http().post('/v1/auth/refresh').send({ refreshToken: first.body.refreshToken }).expect(200);
     // Reuse after the grace window is treated as theft → whole family revoked.
     await ctx.prisma.session.updateMany({ where: { userId: u.user.id, rotatedAt: { not: null } }, data: { rotatedAt: new Date(Date.now() - 60_000) } });

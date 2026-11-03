@@ -58,7 +58,15 @@ function Editor({ id }: { id: string }) {
 
       {editable && (
         <Card>
-          <PhotoManager listingId={id} images={listing.images} onChange={(images) => setListing((l) => (l ? { ...l, images } : l))} />
+          <PhotoManager
+            listingId={id}
+            images={listing.images}
+            onChange={(images) => {
+              setListing((l) => (l ? { ...l, images } : l));
+              // Photo changes on a live listing can send it back to review; refresh the status shown.
+              if (listing.status === 'ACTIVE') load();
+            }}
+          />
         </Card>
       )}
 

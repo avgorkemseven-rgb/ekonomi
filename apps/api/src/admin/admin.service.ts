@@ -95,6 +95,8 @@ export class AdminService {
           moderatedAt: now,
           moderatedById: actor.id,
           moderationNote: null,
+          // The moderator has now seen the current text and photos: this is the new review baseline (ADR-015).
+          contentReviewedAt: now,
         },
       });
       await this.audit.record({ actorId: actor.id, action: 'listing.approve', entityType: 'Listing', entityId: id, ip }, tx);

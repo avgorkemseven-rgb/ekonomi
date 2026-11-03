@@ -40,8 +40,10 @@ NestJS 11 modules: `config`, `prisma`, `auth`, `users`, `categories`, `catalog` 
 - **Validation:** `ZodValidationPipe` with schemas from `@kleps/shared`. Errors → `400 { error: 'VALIDATION_ERROR', issues }`.
 - **Errors:** consistent JSON `{ statusCode, error, message }`; stable machine-readable `error` codes used by clients for localization.
 - **Security:** helmet, CORS allow-list, `@nestjs/throttler` (stricter on auth), argon2id password hashing, request size limits.
-- **Auth:** access token = JWT HS256 (15 min, `sub`, `role`); refresh token = 256-bit random opaque token, stored **hashed**
-  (SHA-256) in `Session`, rotated on every refresh; reuse of a rotated token revokes the whole session family.
+- **Auth:** access token = JWT HS256 (15 min, `sub`, `role`); refresh token = 256-bit opaque token, stored **hashed**
+  (SHA-256) in `Session`, rotated on every refresh under a row lock. The successor is derived deterministically
+  (HMAC of the presented token), so concurrent refreshes converge on one successor; bounded in-window replays (≤10 s,
+  ≤5×) get the same successor, any other reuse revokes the whole session family (ADR-014).
   Guards: `JwtAuthGuard` (required), `OptionalAuthGuard`, `RolesGuard` with `@Roles('MODERATOR')`.
 - **Authorization:** ownership checks in services (seller can only modify own listings); role checks for admin routes;
   suspended users cannot authenticate or publish.
@@ -72,19 +74,24 @@ GET  /health
 - `User` (email unique, username unique, passwordHash, displayName, role USER|MODERATOR|ADMIN, sellerType INDIVIDUAL|BUSINESS,
   verificationStatus NONE|PENDING|VERIFIED, status ACTIVE|SUSPENDED, city, bio, phone + phoneVerifiedAt, emailVerifiedAt,
   activeListingLimit override)
-- `Session` (refresh token hash, family id, expiresAt, revokedAt, rotatedAt, userAgent, ip)
+- `Session` (refresh token hash, family id, expiresAt, revokedAt, rotatedAt, replacedById, graceReplayCount, userAgent, ip)
 - `Category` (self-referencing tree, slug unique, name, translations JSON, icon, sortOrder, isActive)
 - `CategoryAttribute` (key, label, type TEXT|NUMBER|SELECT|BOOLEAN, options, unit, required, filterable, sortOrder)
   — effective attributes = own + all ancestors'
 - `Brand` (+ many-to-many with categories), `ProductModel` (brand, optional category)
 - `Listing` (seller, category, brand?, model?, title, description, priceAmount (kuruş), currency, condition, city, district,
   attributes JSON, allowsShipping, allowsInPerson, status, searchText (normalized), publishedAt, expiresAt, renewCount,
-  moderation fields, viewCount)
+  moderation fields incl. `contentReviewedAt` review baseline, viewCount)
 - `ListingImage` (storageKey, url, width, height, sizeBytes, mimeType, position)
 - `AuditLog` (actor, action, entityType, entityId, metadata JSON)
 
 Indexes: `Listing(status, publishedAt)`, `Listing(categoryId, status)`, `Listing(sellerId, status)`, `Listing(city, status)`,
 `Listing(priceAmount)`, GIN trigram index on `Listing.searchText` (raw SQL migration), `Category(parentId)`.
+
+### Moderation of live listings (ADR-015)
+Publish and renewal run the risk rules over all free text. Edits to ACTIVE listings that change content re-run them
+(category changes always go to review); photo changes send a listing back to review when its cover or most photos were
+added after `contentReviewedAt` (last publish decision or moderator approval).
 
 ## 5. Search
 
@@ -108,7 +115,8 @@ Video (later): direct-to-storage presigned multipart upload + async transcoding 
 
 - Server components fetch public data from the API (`API_INTERNAL_URL`).
 - Session: login/register route handlers call the API and store access + refresh tokens in **httpOnly, Secure, SameSite=Lax cookies**.
-  Browser code never sees tokens. Client mutations call `/api/proxy/*`, which attaches the bearer token, transparently refreshes
+  Browser code never sees tokens. Request bodies are read with a hard byte limit (16 MB proxy, 16 KB auth; ADR-016).
+  Client mutations call `/api/proxy/*`, which attaches the bearer token, transparently refreshes
   on 401, and forwards to the API (streams multipart uploads). CSRF: SameSite=Lax + same-origin check on mutating proxy requests.
 - Tailwind CSS v4 with tokens from `@kleps/tokens` as CSS variables; dark mode via `prefers-color-scheme`.
 

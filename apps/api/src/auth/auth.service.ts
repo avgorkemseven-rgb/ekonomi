@@ -14,6 +14,15 @@ export interface ClientMeta {
   userAgent?: string;
 }
 
+/** Max times one rotated token may be re-presented inside the grace window before it is treated as replay. */
+export const GRACE_REPLAY_LIMIT = 5;
+
+type RefreshOutcome =
+  | { kind: 'grant'; user: User; refreshToken: string; refreshTokenExpiresAt: Date }
+  | { kind: 'replay'; familyId: string }
+  | { kind: 'suspended' }
+  | { kind: 'invalid' };
+
 // argon2id parameters (OWASP recommended minimums: m=19 MiB, t=2, p=1).
 const ARGON_OPTS = { memoryCost: 19456, timeCost: 2, parallelism: 1 } as const;
 
@@ -66,40 +75,77 @@ export class AuthService {
   }
 
   /**
-   * Rotates a refresh token. A token can be used exactly once; presenting an already-rotated or revoked
-   * token is treated as theft and revokes the entire session family.
+   * Rotates a refresh token (ADR-014).
+   *
+   * - The session row is locked (`SELECT … FOR UPDATE`), so concurrent refreshes of one token are serialized.
+   * - The first request rotates it and creates exactly one successor whose token is derived deterministically
+   *   from the presented token (see TokenService.deriveSuccessorToken).
+   * - A rotated token presented again within REFRESH_REUSE_GRACE_SECONDS (max 60 s) and at most
+   *   GRACE_REPLAY_LIMIT times receives the *same* successor plus a fresh access token — no new session is created,
+   *   so the successor stays single-use and later double use is still detected.
+   * - Any other reuse of a rotated or revoked token (outside the window, over the cap, or after the successor
+   *   was itself used/revoked) is replay: the family is revoked, except the ambiguous in-window case where the
+   *   successor was already used, which is rejected without revocation.
    */
   async refresh(refreshToken: string, meta: ClientMeta): Promise<AuthResponse> {
-    const invalid = () =>
-      new AppError(HttpStatus.UNAUTHORIZED, ERROR_CODES.INVALID_REFRESH_TOKEN, 'Invalid refresh token');
     const tokenHash = this.tokens.hashToken(refreshToken);
-    const session = await this.prisma.session.findUnique({ where: { tokenHash }, include: { user: true } });
-    if (!session) throw invalid();
+    const outcome = await this.prisma.$transaction(async (tx): Promise<RefreshOutcome> => {
+      const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Session" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
+      if (!locked[0]) return { kind: 'invalid' };
+      const session = await tx.session.findUniqueOrThrow({ where: { id: locked[0].id }, include: { user: true } });
+      const now = new Date();
 
-    if (session.revokedAt || session.rotatedAt) {
-      const withinGrace =
-        !session.revokedAt &&
-        session.rotatedAt !== null &&
-        Date.now() - session.rotatedAt.getTime() < this.config.REFRESH_REUSE_GRACE_SECONDS * 1000;
-      // Parallel requests from one client may race on the same token; only reuse after the grace window is treated as theft.
-      if (!withinGrace) await this.revokeFamily(session.familyId);
-      throw invalid();
-    }
-    if (session.expiresAt <= new Date()) throw invalid();
-    if (session.user.status === 'SUSPENDED') {
-      throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.ACCOUNT_SUSPENDED, 'Account suspended');
-    }
+      if (session.revokedAt) return { kind: 'replay', familyId: session.familyId };
 
-    // Conditional update guarantees single use even under concurrent refreshes.
-    const claimed = await this.prisma.session.updateMany({
-      where: { id: session.id, rotatedAt: null, revokedAt: null },
-      data: { rotatedAt: new Date() },
+      if (session.rotatedAt) {
+        const inWindow = now.getTime() - session.rotatedAt.getTime() < this.config.REFRESH_REUSE_GRACE_SECONDS * 1000;
+        if (!inWindow || session.graceReplayCount >= GRACE_REPLAY_LIMIT) return { kind: 'replay', familyId: session.familyId };
+        const successor = session.replacedById ? await tx.session.findUnique({ where: { id: session.replacedById } }) : null;
+        const successorToken = this.tokens.deriveSuccessorToken(refreshToken);
+        if (
+          !successor ||
+          successor.revokedAt ||
+          successor.rotatedAt ||
+          successor.expiresAt <= now ||
+          successor.tokenHash !== this.tokens.hashToken(successorToken)
+        ) {
+          return { kind: 'invalid' };
+        }
+        if (session.user.status === 'SUSPENDED') return { kind: 'suspended' };
+        await tx.session.update({ where: { id: session.id }, data: { graceReplayCount: { increment: 1 } } });
+        return { kind: 'grant', user: session.user, refreshToken: successorToken, refreshTokenExpiresAt: successor.expiresAt };
+      }
+
+      if (session.expiresAt <= now) return { kind: 'invalid' };
+      if (session.user.status === 'SUSPENDED') return { kind: 'suspended' };
+
+      const successorToken = this.tokens.deriveSuccessorToken(refreshToken);
+      const successor = await tx.session.create({
+        data: {
+          userId: session.userId,
+          familyId: session.familyId,
+          tokenHash: this.tokens.hashToken(successorToken),
+          expiresAt: this.tokens.refreshExpiry(),
+          ip: meta.ip?.slice(0, 64),
+          userAgent: meta.userAgent?.slice(0, 256),
+        },
+      });
+      await tx.session.update({ where: { id: session.id }, data: { rotatedAt: now, replacedById: successor.id } });
+      return { kind: 'grant', user: session.user, refreshToken: successorToken, refreshTokenExpiresAt: successor.expiresAt };
     });
-    if (claimed.count !== 1) {
-      await this.revokeFamily(session.familyId);
-      throw invalid();
+
+    switch (outcome.kind) {
+      case 'grant':
+        return this.respond(outcome.user, outcome.refreshToken, outcome.refreshTokenExpiresAt);
+      case 'suspended':
+        throw new AppError(HttpStatus.FORBIDDEN, ERROR_CODES.ACCOUNT_SUSPENDED, 'Account suspended');
+      case 'replay':
+        // Revocation is committed separately so it persists even though the request fails.
+        await this.revokeFamily(outcome.familyId);
+        throw new AppError(HttpStatus.UNAUTHORIZED, ERROR_CODES.INVALID_REFRESH_TOKEN, 'Invalid refresh token');
+      case 'invalid':
+        throw new AppError(HttpStatus.UNAUTHORIZED, ERROR_CODES.INVALID_REFRESH_TOKEN, 'Invalid refresh token');
     }
-    return this.issue(session.user, session.familyId, meta);
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -115,8 +161,8 @@ export class AuthService {
     await this.prisma.session.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
+  /** Starts a new session family (login / registration) with a random refresh token. */
   private async issue(user: User, familyId: string, meta: ClientMeta): Promise<AuthResponse> {
-    const access = this.tokens.signAccessToken({ sub: user.id, role: user.role });
     const refreshToken = this.tokens.generateRefreshToken();
     const refreshTokenExpiresAt = this.tokens.refreshExpiry();
     await this.prisma.session.create({
@@ -129,6 +175,11 @@ export class AuthService {
         userAgent: meta.userAgent?.slice(0, 256),
       },
     });
+    return this.respond(user, refreshToken, refreshTokenExpiresAt);
+  }
+
+  private respond(user: User, refreshToken: string, refreshTokenExpiresAt: Date): AuthResponse {
+    const access = this.tokens.signAccessToken({ sub: user.id, role: user.role });
     return {
       user: toMeDto(user, this.config),
       accessToken: access.token,

@@ -54,6 +54,8 @@ export default function EditListingScreen() {
       setMessage({ text: errorMessage(err), tone: 'danger' });
     } finally {
       setUploading(null);
+      // Photo changes on a live listing can send it back to review; refresh the status shown.
+      if (listing!.status === 'ACTIVE') load();
     }
   }
 
@@ -61,6 +63,7 @@ export default function EditListingScreen() {
     try {
       await api.listings.deleteImage(listing!.id, imageId);
       setListing((l) => (l ? { ...l, images: l.images.filter((i) => i.id !== imageId) } : l));
+      if (listing!.status === 'ACTIVE') load();
     } catch (err) {
       setMessage({ text: errorMessage(err), tone: 'danger' });
     }
