@@ -45,7 +45,7 @@ Context: Docker daemon is unavailable in the build sandbox. Decision: use locall
 ## ADR-010 — Offset pagination in phase 1 · 2026-10-31 · accepted
 Decision: `page`/`pageSize` (max 50) with total counts; fine at MVP scale and simplest for UIs. Switch heavy feeds to cursor pagination later.
 
-## ADR-011 — Refresh-token reuse grace window · 2026-10-31 · accepted
+## ADR-011 — Refresh-token reuse grace window · 2026-10-31 · superseded by ADR-014
 Context: the web BFF can receive parallel requests that all try to refresh with the same (single-use) refresh token; strict
 reuse detection would revoke the session family and log the user out. Decision: a rotated token presented again within
 `REFRESH_REUSE_GRACE_SECONDS` (default 10 s) is rejected **without** revoking the family; after the window it is treated as
@@ -59,3 +59,23 @@ HTTP 200. Decision: no root loading boundary; client pages render their own spin
 Context: the sandbox cannot run iOS/Android simulators or EAS. Decision: verify mobile with `tsc`, `expo config`,
 `expo export` for android + ios (Metro → Hermes bytecode), and a react-native-web export exercised by Playwright against the
 real API. None of these prove a native build succeeds; EAS builds remain a pending step.
+
+## ADR-014 — Serialized refresh rotation with deterministic successor · 2026-11-03 · accepted (supersedes ADR-011)
+Context: code review found that ADR-011's grace window only applied when a request *read* an already-rotated token. Two
+truly simultaneous refreshes both read it as fresh; the loser's conditional update claimed 0 rows and it revoked the whole
+family — logging the user out (reproduced: 5 parallel refreshes → 1×200, 4×401, family revoked).
+Decision:
+- Refresh runs in a transaction that locks the session row (`SELECT … FOR UPDATE`), so concurrent refreshes of one token
+  are serialized and every loser sees the winner's committed result.
+- The successor token is `HMAC(K, presentedToken)` with `K = HMAC(JWT_ACCESS_SECRET, "kleps/refresh-successor/v1")`.
+  Only the hash is stored. A rotated token re-presented inside `REFRESH_REUSE_GRACE_SECONDS` (default 10, max 60) gets the
+  **same** successor and a fresh access token; no extra session is created. At most `GRACE_REPLAY_LIMIT` (5) such
+  replays per token.
+- Replay protection: reuse outside the window, beyond the cap, or of a revoked token revokes the whole family. If the
+  successor has already been rotated/revoked, an in-window replay is refused (no token) without revocation (ambiguous
+  late parallel request); after the window it revokes. Because the successor is single-use, two parties holding it
+  (victim + thief who replayed within the window) are detected as soon as both use it.
+Trade-offs: a thief who obtains a refresh token and replays it within ≤10 s of the legitimate rotation receives the same
+successor as the victim — the same exposure as any reuse interval (Auth0/Okta use the same pattern), bounded in time and
+count, and detected on the successor's second use. Rotating `JWT_ACCESS_SECRET` breaks in-flight grace replays (≤ window)
+and already requires re-login for access tokens. Refresh adds one row lock per refresh call; contention is per token only.

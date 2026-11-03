@@ -15,7 +15,7 @@ const envSchema = z
     JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
     ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
     REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
-    /** A just-rotated refresh token presented again within this window is rejected without revoking the family (parallel requests). */
+    /** A just-rotated refresh token re-presented within this window receives the same successor (bounded, ADR-014); later reuse revokes the family. */
     REFRESH_REUSE_GRACE_SECONDS: z.coerce.number().int().min(0).max(60).default(10),
     CORS_ORIGINS: z.string().default(''),
     TRUST_PROXY: bool.default(false),

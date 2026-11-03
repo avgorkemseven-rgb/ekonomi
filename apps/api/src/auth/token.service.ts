@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
 import { APP_CONFIG, type AppConfig } from '../config/config';
@@ -41,6 +41,17 @@ export class TokenService {
   /** 256-bit opaque refresh token. */
   generateRefreshToken(): string {
     return randomBytes(32).toString('base64url');
+  }
+
+  /**
+   * Deterministic successor of a refresh token: HMAC(K, predecessor) with K derived from the server secret under a
+   * dedicated label (domain separation from JWT signing). Only someone holding the raw predecessor *and* the server
+   * secret can compute it, which lets concurrent refreshes of the same token converge on one successor without
+   * storing raw tokens (ADR-014).
+   */
+  deriveSuccessorToken(predecessor: string): string {
+    const key = createHmac('sha256', this.config.JWT_ACCESS_SECRET).update('kleps/refresh-successor/v1').digest();
+    return createHmac('sha256', key).update(predecessor).digest('base64url');
   }
 
   hashToken(token: string): string {

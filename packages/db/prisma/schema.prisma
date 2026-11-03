@@ -94,6 +94,10 @@ model Session {
   familyId   String
   expiresAt  DateTime
   rotatedAt  DateTime?
+  /// Session created when this token was rotated (its single successor).
+  replacedById     String?   @unique
+  /// Number of times this rotated token was re-presented inside the grace window (bounded, see ADR-014).
+  graceReplayCount Int       @default(0)
   revokedAt  DateTime?
   userAgent  String?
   ip         String?
